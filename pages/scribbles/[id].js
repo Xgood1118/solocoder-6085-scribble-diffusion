@@ -19,7 +19,11 @@ export default function Scribble({ prediction, baseUrl }) {
         />
       </Head>
       <main className="container max-w-[1024px] mx-auto p-5">
-        <Prediction prediction={prediction} showLinkToNewScribble={true} />
+        <Prediction
+          prediction={prediction}
+          showLinkToNewScribble={true}
+          isLatest={true}
+        />
       </main>
     </div>
   );

@@ -16,6 +16,10 @@ const HOST = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
   : "http://localhost:3000";
 
+function generateRandomSeed() {
+  return Math.floor(Math.random() * 1000000);
+}
+
 export default function Home() {
   const [error, setError] = useState(null);
   const [submissionCount, setSubmissionCount] = useState(0);
@@ -26,28 +30,30 @@ export default function Home() {
   const [initialPrompt] = useState(seed.prompt);
   const [scribble, setScribble] = useState(null);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [lastInput, setLastInput] = useState(null);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const runPrediction = async (inputData) => {
+    const { prompt, rawPrompt, image, stylePrefix, styleName, styleEnabled } =
+      inputData;
 
-    // track submissions so we can show a spinner while waiting for the next prediction to be created
-    setSubmissionCount(submissionCount + 1);
-
-    const prompt = e.target.prompt.value
-      .split(/\s+/)
-      .map((word) => (naughtyWords.en.includes(word) ? "something" : word))
-      .join(" ");
-
+    setSubmissionCount((c) => c + 1);
     setError(null);
     setIsProcessing(true);
 
-    const fileUrl = await uploadFile(scribble);
+    const fileUrl = await uploadFile(image);
+
+    const seed = generateRandomSeed();
 
     const body = {
       prompt,
       image: fileUrl,
       structure: "scribble",
+      seed: seed,
       replicate_api_token: localStorage.getItem("replicate_api_token"),
+      rawPrompt: rawPrompt,
+      stylePrefix: stylePrefix,
+      styleName: styleName,
+      styleEnabled: styleEnabled,
     };
 
     const response = await fetch("/api/predictions", {
@@ -59,13 +65,25 @@ export default function Home() {
     });
     let prediction = await response.json();
 
-    setPredictions((predictions) => ({
-      ...predictions,
+    prediction.input = {
+      ...prediction.input,
+      image: fileUrl,
+      rawPrompt: rawPrompt,
+      prompt: prompt,
+      stylePrefix: stylePrefix,
+      styleName: styleName,
+      styleEnabled: styleEnabled,
+      seed: seed,
+    };
+
+    setPredictions((prev) => ({
+      ...prev,
       [prediction.id]: prediction,
     }));
 
     if (response.status !== 201) {
       setError(prediction.detail);
+      setIsProcessing(false);
       return;
     }
 
@@ -82,12 +100,25 @@ export default function Home() {
         },
       });
       prediction = await response.json();
-      setPredictions((predictions) => ({
-        ...predictions,
+
+      prediction.input = {
+        ...prediction.input,
+        image: fileUrl,
+        rawPrompt: rawPrompt,
+        prompt: prompt,
+        stylePrefix: stylePrefix,
+        styleName: styleName,
+        styleEnabled: styleEnabled,
+        seed: seed,
+      };
+
+      setPredictions((prev) => ({
+        ...prev,
         [prediction.id]: prediction,
       }));
       if (response.status !== 200) {
         setError(prediction.detail);
+        setIsProcessing(false);
         return;
       }
     }
@@ -95,9 +126,56 @@ export default function Home() {
     setIsProcessing(false);
   };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    const fullPrompt = e.target.prompt?.value || "";
+    const rawPrompt = e.target.rawPrompt?.value || fullPrompt;
+    const stylePrefix = e.target.stylePrefix?.value || "";
+    const styleName = e.target.styleName?.value || "";
+    const styleEnabled = e.target.styleEnabled?.value === "true";
+
+    const cleanedPrompt = fullPrompt
+      .split(/\s+/)
+      .map((word) => (naughtyWords.en.includes(word) ? "something" : word))
+      .join(" ");
+
+    const cleanedRawPrompt = rawPrompt
+      .split(/\s+/)
+      .map((word) => (naughtyWords.en.includes(word) ? "something" : word))
+      .join(" ");
+
+    const inputData = {
+      prompt: cleanedPrompt,
+      rawPrompt: cleanedRawPrompt,
+      image: scribble,
+      stylePrefix,
+      styleName,
+      styleEnabled,
+    };
+
+    setLastInput(inputData);
+    await runPrediction(inputData);
+  };
+
+  const handleRetry = async (prediction) => {
+    if (!prediction) return;
+
+    const inputData = {
+      prompt: prediction.input?.prompt || prediction.input?.rawPrompt || "",
+      rawPrompt: prediction.input?.rawPrompt || "",
+      image: scribble || prediction.input?.image,
+      stylePrefix: prediction.input?.stylePrefix || "",
+      styleName: prediction.input?.styleName || "",
+      styleEnabled: prediction.input?.styleEnabled !== "false",
+    };
+
+    setLastInput(inputData);
+    await runPrediction(inputData);
+  };
+
   const handleTokenSubmit = (e) => {
     e.preventDefault();
-    console.log(e.target[0].value);
     localStorage.setItem("replicate_api_token", e.target[0].value);
     setWelcomeOpen(false);
   };
@@ -162,6 +240,7 @@ export default function Home() {
           predictions={predictions}
           isProcessing={isProcessing}
           submissionCount={submissionCount}
+          onRetry={handleRetry}
         />
       </main>
 

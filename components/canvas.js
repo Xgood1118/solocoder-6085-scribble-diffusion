@@ -52,7 +52,6 @@ export default function Canvas({
   const [selectedBrush, setSelectedBrush] = useState("marker");
   const [showBrushMenu, setShowBrushMenu] = useState(false);
   const [strokeHistory, setStrokeHistory] = useState([]);
-  const [redoStack, setRedoStack] = useState([]);
   const [pathCount, setPathCount] = useState(0);
   const brushMenuRef = useRef(null);
 
@@ -77,7 +76,26 @@ export default function Canvas({
   }, []);
 
   async function loadStartingPaths() {
-    if (startingPaths && startingPaths.length > 0) {
+    const savedPaths = localStorage.getItem("paths");
+    const canvasCleared = localStorage.getItem("canvas_cleared") === "true";
+
+    if (savedPaths) {
+      try {
+        const parsedPaths = JSON.parse(savedPaths);
+        if (parsedPaths && parsedPaths.length > 0) {
+          await canvasRef.current.loadPaths(parsedPaths);
+          setScribbleExists(true);
+          setPathCount(parsedPaths.length);
+          updateStrokeHistory(parsedPaths);
+          onChange();
+          return;
+        }
+      } catch (e) {
+        console.error("Failed to parse saved paths", e);
+      }
+    }
+
+    if (!canvasCleared && startingPaths && startingPaths.length > 0) {
       await canvasRef.current.loadPaths(startingPaths);
       setScribbleExists(true);
       setPathCount(startingPaths.length);
@@ -184,6 +202,7 @@ export default function Canvas({
     }
 
     localStorage.setItem("paths", JSON.stringify(paths, null, 2));
+    localStorage.removeItem("canvas_cleared");
 
     if (paths.length !== pathCount) {
       if (paths.length > pathCount) {
@@ -209,6 +228,7 @@ export default function Canvas({
     setStrokeHistory([]);
     setPathCount(0);
     localStorage.removeItem("paths");
+    localStorage.setItem("canvas_cleared", "true");
     canvasRef.current.resetCanvas();
   };
 

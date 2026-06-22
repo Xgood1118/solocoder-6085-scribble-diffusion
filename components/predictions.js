@@ -6,32 +6,11 @@ import {
   Twitter as TwitterIcon,
   MessageSquare as RedditIcon,
   BarChart3 as StatsIcon,
+  Loader as LoaderIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { Fragment, useEffect, useRef, useState } from "react";
 import Loader from "components/loader";
-
-const SHARE_CLICKS_KEY = "scribble_share_clicks";
-
-function getShareClicks() {
-  try {
-    const saved = localStorage.getItem(SHARE_CLICKS_KEY);
-    return saved ? JSON.parse(saved) : {};
-  } catch {
-    return {};
-  }
-}
-
-function incrementShareClick(predictionId, platform) {
-  const clicks = getShareClicks();
-  if (!clicks[predictionId]) {
-    clicks[predictionId] = { twitter: 0, reddit: 0, total: 0 };
-  }
-  clicks[predictionId][platform] = (clicks[predictionId][platform] || 0) + 1;
-  clicks[predictionId].total = (clicks[predictionId].total || 0) + 1;
-  localStorage.setItem(SHARE_CLICKS_KEY, JSON.stringify(clicks));
-  return clicks[predictionId];
-}
 
 export default function Predictions({
   predictions,
@@ -95,21 +74,37 @@ export function Prediction({
   const [linkCopied, setLinkCopied] = useState(false);
   const [shareStats, setShareStats] = useState(null);
   const [showStats, setShowStats] = useState(false);
+  const [loadingStats, setLoadingStats] = useState(false);
+
+  const predictionId = prediction.uuid || prediction.id;
+
+  const fetchShareStats = async () => {
+    setLoadingStats(true);
+    try {
+      const response = await fetch(`/api/share-stats/${predictionId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setShareStats(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch share stats:", error);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
 
   useEffect(() => {
-    const clicks = getShareClicks();
-    setShareStats(clicks[prediction.id] || { twitter: 0, reddit: 0, total: 0 });
-  }, [prediction.id]);
+    if (showStats && !shareStats) {
+      fetchShareStats();
+    }
+  }, [showStats, predictionId]);
 
-  const predictionUrl =
-    typeof window !== "undefined"
-      ? window.location.origin +
-        "/scribbles/" +
-        (prediction.uuid || prediction.id)
-      : "";
+  const baseUrl =
+    typeof window !== "undefined" ? window.location.origin : "";
+  const shareTrackingUrl = `${baseUrl}/api/share/${predictionId}`;
 
   const copyLink = () => {
-    copy(predictionUrl);
+    copy(`${baseUrl}/scribbles/${predictionId}`);
     setLinkCopied(true);
   };
 
@@ -122,26 +117,22 @@ export function Prediction({
   const handleShare = (platform) => {
     const rawPrompt = prediction.input?.rawPrompt || prediction.input?.prompt || "";
     const shareText = `我用 Scribble Diffusion 画的：${rawPrompt}`;
-    const imageUrl =
-      prediction.output?.[prediction.output.length - 1] ||
-      prediction.input?.image ||
-      "";
+
+    const trackingUrl = `${shareTrackingUrl}?platform=${platform}`;
 
     let shareUrl = "";
     if (platform === "twitter") {
       shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
         shareText
-      )}&url=${encodeURIComponent(predictionUrl)}`;
+      )}&url=${encodeURIComponent(trackingUrl)}`;
     } else if (platform === "reddit") {
       shareUrl = `https://www.reddit.com/submit?url=${encodeURIComponent(
-        predictionUrl
+        trackingUrl
       )}&title=${encodeURIComponent(shareText)}`;
     }
 
     if (shareUrl) {
       window.open(shareUrl, "_blank", "width=600,height=400");
-      const newStats = incrementShareClick(prediction.id, platform);
-      setShareStats(newStats);
     }
   };
 
@@ -252,10 +243,19 @@ export function Prediction({
 
         <button
           className="lil-button relative"
-          onClick={() => setShowStats(!showStats)}
+          onClick={() => {
+            setShowStats(!showStats);
+            if (!showStats) {
+              fetchShareStats();
+            }
+          }}
           title="查看分享统计"
         >
-          <StatsIcon className="icon" />
+          {loadingStats ? (
+            <LoaderIcon className="icon animate-spin" />
+          ) : (
+            <StatsIcon className="icon" />
+          )}
           统计
           {shareStats && shareStats.total > 0 && (
             <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
@@ -285,19 +285,33 @@ export function Prediction({
         )}
       </div>
 
-      {showStats && shareStats && (
+      {showStats && (
         <div className="text-center py-2">
-          <div className="inline-flex gap-4 text-sm text-gray-500 bg-gray-50 px-4 py-2 rounded-md">
-            <span>
-              <TwitterIcon className="w-4 h-4 inline mr-1" />
-              Twitter: {shareStats.twitter || 0}
-            </span>
-            <span>
-              <RedditIcon className="w-4 h-4 inline mr-1" />
-              Reddit: {shareStats.reddit || 0}
-            </span>
-            <span className="font-medium">总计: {shareStats.total || 0}</span>
-          </div>
+          {loadingStats ? (
+            <div className="inline-flex items-center gap-2 text-sm text-gray-500 bg-gray-50 px-4 py-2 rounded-md">
+              <LoaderIcon className="w-4 h-4 animate-spin" />
+              加载统计中...
+            </div>
+          ) : shareStats ? (
+            <div className="inline-flex gap-4 text-sm text-gray-500 bg-gray-50 px-4 py-2 rounded-md">
+              <span>
+                <TwitterIcon className="w-4 h-4 inline mr-1" />
+                Twitter: {shareStats.twitter || 0}
+              </span>
+              <span>
+                <RedditIcon className="w-4 h-4 inline mr-1" />
+                Reddit: {shareStats.reddit || 0}
+              </span>
+              <span>
+                直达链接: {shareStats.direct || 0}
+              </span>
+              <span className="font-medium">总计: {shareStats.total || 0}</span>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-2 text-sm text-gray-500 bg-gray-50 px-4 py-2 rounded-md">
+              暂无分享数据
+            </div>
+          )}
         </div>
       )}
     </div>

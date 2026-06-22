@@ -10,7 +10,7 @@ export default function RecentScribbles({ predictions }) {
         <meta name="description" content={pkg.appMetaDescription} />
         <meta property="og:title" content={pkg.appName} />
         <meta property="og:description" content={pkg.appMetaDescription} />
-        <title>{pkg.appName}</title>s
+        <title>Recent Scribbles - {pkg.appName}</title>
       </Head>
       <main className="container max-w-[1024px] mx-auto p-5 ">
         <div className="container max-w-[512px] mx-auto">
@@ -24,13 +24,20 @@ export default function RecentScribbles({ predictions }) {
           </hgroup>
         </div>
 
-        <Predictions predictions={predictions} />
+        <Predictions
+          predictions={predictions}
+          submissionCount={Object.keys(predictions).length}
+        />
       </main>
     </div>
   );
 }
 
 export async function getServerSideProps() {
-  const predictions = await getRecentPredictions();
+  const predictionsArray = await getRecentPredictions();
+  const predictions = predictionsArray.reduce((acc, p) => {
+    acc[p.uuid] = p;
+    return acc;
+  }, {});
   return { props: { predictions } };
 }

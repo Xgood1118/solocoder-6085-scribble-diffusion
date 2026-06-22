@@ -175,13 +175,15 @@ export default function Canvas({
 
   const onChange = async () => {
     const paths = await canvasRef.current.exportPaths();
-    localStorage.setItem("paths", JSON.stringify(paths, null, 2));
 
     if (!paths.length) {
       setStrokeHistory([]);
       setPathCount(0);
+      localStorage.removeItem("paths");
       return;
     }
+
+    localStorage.setItem("paths", JSON.stringify(paths, null, 2));
 
     if (paths.length !== pathCount) {
       if (paths.length > pathCount) {
@@ -206,6 +208,7 @@ export default function Canvas({
     setScribbleExists(false);
     setStrokeHistory([]);
     setPathCount(0);
+    localStorage.removeItem("paths");
     canvasRef.current.resetCanvas();
   };
 

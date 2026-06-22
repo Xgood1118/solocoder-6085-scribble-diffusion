@@ -164,7 +164,7 @@ export default function Home() {
     const inputData = {
       prompt: prediction.input?.prompt || prediction.input?.rawPrompt || "",
       rawPrompt: prediction.input?.rawPrompt || "",
-      image: scribble || prediction.input?.image,
+      image: prediction.input?.image || scribble,
       stylePrefix: prediction.input?.stylePrefix || "",
       styleName: prediction.input?.styleName || "",
       styleEnabled: prediction.input?.styleEnabled !== "false",

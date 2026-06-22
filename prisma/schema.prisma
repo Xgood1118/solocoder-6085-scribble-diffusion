@@ -21,4 +21,16 @@ model Prediction {
   metrics Json?
   error String?
   logs String? @db.Text
+  shareClicks ShareClick[]
+}
+
+model ShareClick {
+  id            Int      @id @default(autoincrement())
+  predictionId  Int
+  prediction    Prediction @relation(fields: [predictionId], references: [id])
+  platform      String   // "twitter", "reddit", "direct"
+  referer       String?
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
 }
